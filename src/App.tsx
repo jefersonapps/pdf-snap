@@ -3,17 +3,8 @@ import { saveAs } from "file-saver";
 import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
 
-import { UploadCloud, Loader2, FileText, XCircle, Github } from "lucide-react";
+import { Loader2, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -26,21 +17,24 @@ import { Toaster, toast } from "sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModeToggle } from "./components/mode-toggle";
 import { Separator } from "./components/ui/separator";
-import { ScrollArea, ScrollBar } from "./components/ui/scroll-area";
+import { Options } from "./components/options";
+import { DropZone } from "./components/dropzone";
+import { FileQueue } from "./components/file-queue";
+import { ConversionStatus } from "./components/conversion-status";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.mjs`;
 
 const APP_NAME = "PDFsnap";
-type ImageFormat = "image/png" | "image/jpeg";
-type ImageScale = 2 | 4 | 8;
+export type ImageFormat = "image/png" | "image/jpeg";
+export type ImageScale = 2 | 4 | 8;
 
-type FileWithPreview = {
+export type FileWithPreview = {
   file: File;
   id: string;
   previewUrl: string | null;
 };
 
-type ProgressState = {
+export type ProgressState = {
   currentFileNumber: number;
   totalFiles: number;
   currentFileName: string;
@@ -48,223 +42,6 @@ type ProgressState = {
   totalPages: number;
   isZipping: boolean;
 };
-
-interface OptionsProps {
-  zipFileName: string;
-  onZipFileNameChange: (name: string) => void;
-  imageFormat: ImageFormat;
-  onImageFormatChange: (format: ImageFormat) => void;
-  imageScale: ImageScale;
-  onImageScaleChange: (scale: ImageScale) => void;
-  isConverting: boolean;
-}
-interface DropZoneProps {
-  onClick: () => void;
-  setSelectedFiles: React.Dispatch<React.SetStateAction<FileWithPreview[]>>;
-}
-interface FileQueueProps {
-  files: FileWithPreview[];
-  onRemoveFile: (id: string) => void;
-  isConverting: boolean;
-}
-interface ConversionStatusProps {
-  progress: ProgressState;
-}
-
-function Options({
-  zipFileName,
-  onZipFileNameChange,
-  imageFormat,
-  onImageFormatChange,
-  imageScale,
-  onImageScaleChange,
-  isConverting,
-}: OptionsProps) {
-  return (
-    <div className="flex flex-wrap w-full gap-4 mb-6">
-      <div className="space-y-2 w-full">
-        <Label htmlFor="zip-name">Nome do arquivo final</Label>
-        <div className="flex gap-1 items-center">
-          <Input
-            id="zip-name"
-            value={zipFileName}
-            onChange={(e) => onZipFileNameChange(e.target.value)}
-            placeholder="ex: imagens_convertidas"
-            disabled={isConverting}
-          />
-          <span className="text-sm text-muted-foreground">.zip</span>
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="image-format">Formato (Saída)</Label>
-        <Select
-          value={imageFormat}
-          onValueChange={(value: ImageFormat) => onImageFormatChange(value)}
-          disabled={isConverting}
-        >
-          <SelectTrigger id="image-format">
-            <SelectValue placeholder="Selecione o formato" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="image/png">PNG</SelectItem>
-            <SelectItem value="image/jpeg">JPG</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="image-quality">Qualidade</Label>
-        <Select
-          value={String(imageScale)}
-          onValueChange={(value) =>
-            onImageScaleChange(Number(value) as ImageScale)
-          }
-          disabled={isConverting}
-        >
-          <SelectTrigger id="image-quality">
-            <SelectValue placeholder="Selecione a qualidade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="2">2x (Alta)</SelectItem>
-            <SelectItem value="4">4x (Muito Alta)</SelectItem>
-            <SelectItem value="8">8x (Ultra)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-  );
-}
-
-function DropZone({ onClick, setSelectedFiles }: DropZoneProps) {
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    setIsDragging(false);
-
-    const files = Array.from(event.dataTransfer.files);
-    const pdfFiles = files.filter((file) => file.type === "application/pdf");
-    const invalidFiles = files.filter(
-      (file) => file.type !== "application/pdf"
-    );
-
-    invalidFiles.forEach((file) => {
-      const [name, extension] = file.name.split(/\.(?=[^.]+$)/);
-      toast.error(`${name}.${extension} não é um tipo válido.`);
-    });
-
-    if (pdfFiles.length > 0) {
-      setSelectedFiles((prevFiles) => {
-        const newFilesWithPreview = pdfFiles
-          .filter(
-            (newFile) =>
-              !prevFiles.some(
-                (existingFile) => existingFile.file.name === newFile.name
-              )
-          )
-          .map((file) => ({
-            file,
-            id: `${file.name}-${file.lastModified}`,
-            previewUrl: null,
-          }));
-        return [...prevFiles, ...newFilesWithPreview];
-      });
-    }
-  };
-
-  return (
-    <div
-      className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg text-center cursor-pointer transition-all ${
-        isDragging
-          ? "scale-105 border-primary bg-muted/50"
-          : "border-border bg-muted/20 hover:border-primary hover:bg-muted/50"
-      }`}
-      onClick={onClick}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      <UploadCloud className="w-12 h-12 text-muted-foreground mb-4" />
-      <p className="text-muted-foreground">
-        Arraste e solte os arquivos PDF aqui ou{" "}
-        <span className="font-semibold text-primary">clique para procurar</span>
-      </p>
-    </div>
-  );
-}
-
-function FileQueue({ files, onRemoveFile, isConverting }: FileQueueProps) {
-  if (files.length === 0) return null;
-
-  return (
-    <div className="w-full mt-6">
-      <h3 className="text-sm font-medium text-muted-foreground mb-2">
-        Fila de Arquivos ({files.length})
-      </h3>
-      <div className="flex pb-2">
-        <ScrollArea className="w-full rounded-md border whitespace-nowrap">
-          <div className="flex w-max space-x-3 p-3">
-            {files.map((fileWithPreview) => (
-              <div
-                key={fileWithPreview.id}
-                className="flex-shrink-0 flex items-center gap-2 bg-muted border border-border p-2 rounded-md w-52"
-              >
-                {fileWithPreview.previewUrl ? (
-                  <img
-                    src={fileWithPreview.previewUrl}
-                    alt={`Preview of ${fileWithPreview.file.name}`}
-                    className="h-8 w-8 object-cover rounded-sm flex-shrink-0"
-                  />
-                ) : (
-                  <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                )}
-                <p
-                  className="text-sm truncate flex-grow"
-                  title={fileWithPreview.file.name}
-                >
-                  {fileWithPreview.file.name}
-                </p>
-                <button
-                  onClick={() => onRemoveFile(fileWithPreview.id)}
-                  disabled={isConverting}
-                  aria-label={`Remover ${fileWithPreview.file.name}`}
-                >
-                  <XCircle className="h-5 w-5 text-muted-foreground hover:text-destructive transition-colors" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
-      </div>
-    </div>
-  );
-}
-
-function ConversionStatus({ progress }: ConversionStatusProps) {
-  return (
-    <div className="flex flex-col items-center gap-2 text-center py-8">
-      <p className="font-medium">
-        {progress.isZipping
-          ? "Compactando arquivos..."
-          : "Convertendo... por favor, aguarde."}
-      </p>
-      <p className="text-sm text-muted-foreground">
-        {progress.isZipping
-          ? "Esta etapa pode levar um momento para arquivos grandes."
-          : `Arquivo ${progress.currentFileNumber} de ${progress.totalFiles}: "${progress.currentFileName}"\nProcessando página ${progress.currentPage} de ${progress.totalPages}`}
-      </p>
-    </div>
-  );
-}
 
 export default function App() {
   const [zipFileName, setZipFileName] = useState("pdfsnap");
